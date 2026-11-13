@@ -1,0 +1,533 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ICP-MS 檢量線計算機</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        body {
+            font-family: 'Inter', system-ui, -apple-system, sans-serif;
+            background-color: #f3f4f6;
+        }
+        /* 隱藏數字輸入框的上下箭頭 */
+        input[type="number"]::-webkit-outer-spin-button,
+        input[type="number"]::-webkit-inner-spin-button {
+            -webkit-appearance: none;
+            margin: 0;
+        }
+        input[type="number"] {
+            -moz-appearance: textfield;
+        }
+    </style>
+</head>
+<body class="text-gray-800">
+
+<div class="max-w-7xl mx-auto p-4 sm:p-6 lg:p-8">
+    
+    <!-- Header -->
+    <header class="mb-8 flex items-center justify-between">
+        <div>
+            <h1 class="text-3xl font-bold text-gray-900 flex items-center gap-3">
+                <svg class="w-8 h-8 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 12l3-3 3 3 4-4M8 21l4-4 4 4M3 4h18M4 4h16v12a1 1 0 01-1 1H5a1 1 0 01-1-1V4z"></path>
+                </svg>
+                ICP-MS 檢量線計算機
+            </h1>
+            <p class="text-gray-500 mt-2">環境檢測專用：支援內標準品 (ISTD) 校正與稀釋倍數計算</p>
+        </div>
+        <button onclick="resetData()" class="bg-gray-200 hover:bg-gray-300 text-gray-700 px-4 py-2 rounded-lg font-medium transition-colors text-sm">
+            重設資料
+        </button>
+    </header>
+
+    <div class="grid grid-cols-1 lg:grid-cols-12 gap-8">
+        
+        <!-- 左側面板：資料輸入 -->
+        <div class="lg:col-span-7 space-y-8">
+            
+            <!-- 檢量線標準品區塊 -->
+            <div class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+                <div class="px-6 py-4 border-b border-gray-200 bg-gray-50 flex justify-between items-center">
+                    <h2 class="text-lg font-semibold text-gray-800">標準品數據 (Standard Curve)</h2>
+                    <button onclick="addStandardRow()" class="text-blue-600 hover:text-blue-700 font-medium text-sm flex items-center gap-1">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path></svg>
+                        新增標準品
+                    </button>
+                </div>
+                <div class="p-6 overflow-x-auto">
+                    <table class="w-full text-sm text-left">
+                        <thead class="text-xs text-gray-500 uppercase bg-gray-50">
+                            <tr>
+                                <th class="px-3 py-2 font-medium">濃度 (µg/L)</th>
+                                <th class="px-3 py-2 font-medium">目標元素 (CPS)</th>
+                                <th class="px-3 py-2 font-medium">內標準品 (CPS)</th>
+                                <th class="px-3 py-2 font-medium bg-blue-50 text-blue-800">訊號比值 (Ratio)</th>
+                                <th class="px-3 py-2 text-center">操作</th>
+                            </tr>
+                        </thead>
+                        <tbody id="standards-body">
+                            <!-- JS 生成 -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- 未知樣品區塊 -->
+            <div class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+                <div class="px-6 py-4 border-b border-gray-200 bg-gray-50 flex justify-between items-center">
+                    <h2 class="text-lg font-semibold text-gray-800">未知樣品 (Unknown Samples)</h2>
+                    <button onclick="addSampleRow()" class="text-blue-600 hover:text-blue-700 font-medium text-sm flex items-center gap-1">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path></svg>
+                        新增樣品
+                    </button>
+                </div>
+                <div class="p-6 overflow-x-auto">
+                    <table class="w-full text-sm text-left">
+                        <thead class="text-xs text-gray-500 uppercase bg-gray-50">
+                            <tr>
+                                <th class="px-3 py-2 font-medium">樣品名稱</th>
+                                <th class="px-3 py-2 font-medium">目標元素 (CPS)</th>
+                                <th class="px-3 py-2 font-medium">內標準品 (CPS)</th>
+                                <th class="px-3 py-2 font-medium">稀釋倍數</th>
+                                <th class="px-3 py-2 text-center">操作</th>
+                            </tr>
+                        </thead>
+                        <tbody id="samples-body">
+                            <!-- JS 生成 -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+        </div>
+
+        <!-- 右側面板：結果與圖表 -->
+        <div class="lg:col-span-5 space-y-8">
+            
+            <!-- 回歸結果資訊 -->
+            <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+                <h2 class="text-lg font-semibold text-gray-800 mb-4">檢量線資訊</h2>
+                <div class="grid grid-cols-2 gap-4">
+                    <div class="bg-blue-50 rounded-lg p-4">
+                        <div class="text-sm text-blue-600 font-medium mb-1">線性方程式</div>
+                        <div class="text-lg font-mono font-bold text-gray-900" id="equation-display">y = 0x + 0</div>
+                    </div>
+                    <div class="bg-green-50 rounded-lg p-4">
+                        <div class="text-sm text-green-700 font-medium mb-1">相關係數 (R²)</div>
+                        <div class="text-lg font-mono font-bold text-gray-900" id="r2-display">0.0000</div>
+                    </div>
+                </div>
+                <div id="curve-error" class="mt-4 text-sm text-red-600 hidden">
+                    ※ 錯誤：需要至少兩個有效的標準品數據才能建立檢量線。
+                </div>
+            </div>
+
+            <!-- 圖表 -->
+            <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+                <h2 class="text-lg font-semibold text-gray-800 mb-4">檢量線圖表</h2>
+                <div class="relative h-64 w-full">
+                    <canvas id="calibrationChart"></canvas>
+                </div>
+            </div>
+
+            <!-- 樣品結果報告 -->
+            <div class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+                <div class="px-6 py-4 border-b border-gray-200 bg-gray-50">
+                    <h2 class="text-lg font-semibold text-gray-800">計算結果報告</h2>
+                </div>
+                <div class="p-6 overflow-x-auto">
+                    <table class="w-full text-sm text-left">
+                        <thead class="text-xs text-gray-500 uppercase bg-gray-50">
+                            <tr>
+                                <th class="px-3 py-2 font-medium">樣品名稱</th>
+                                <th class="px-3 py-2 font-medium">訊號比值</th>
+                                <th class="px-3 py-2 font-medium text-blue-700 bg-blue-50">原始濃度</th>
+                                <th class="px-3 py-2 font-medium text-green-700 bg-green-50">最終濃度 (x稀釋)</th>
+                            </tr>
+                        </thead>
+                        <tbody id="results-body">
+                            <!-- JS 生成 -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+        </div>
+    </div>
+</div>
+
+<script>
+    // --- 初始狀態資料 (以使用者的範例為預設值) ---
+    const initialStandards = [
+        { id: 1, conc: 0, targetCps: 4, istdCps: 1000 },
+        { id: 2, conc: 1, targetCps: 84, istdCps: 1000 },
+        { id: 3, conc: 5, targetCps: 404, istdCps: 1000 },
+        { id: 4, conc: 10, targetCps: 804, istdCps: 1000 },
+        { id: 5, conc: 50, targetCps: 4004, istdCps: 1000 }
+    ];
+
+    const initialSamples = [
+        { id: 1, name: '樣品 A', targetCps: 244, istdCps: 1000, dilution: 10 }
+    ];
+
+    // --- 應用程式狀態 ---
+    let standards = JSON.parse(JSON.stringify(initialStandards));
+    let samples = JSON.parse(JSON.stringify(initialSamples));
+    let nextStdId = 6;
+    let nextSmpId = 2;
+    let chartInstance = null;
+    let regressionModel = { slope: 0, intercept: 0, r2: 0, valid: false, maxConc: 0 };
+
+    // --- 初始化 ---
+    window.onload = () => {
+        renderAll();
+    };
+
+    // --- 渲染畫面 ---
+    function renderAll() {
+        renderStandards();
+        renderSamples();
+        calculateRegression();
+        renderResults();
+        updateChart();
+    }
+
+    // 渲染標準品表格
+    function renderStandards() {
+        const tbody = document.getElementById('standards-body');
+        tbody.innerHTML = '';
+        standards.forEach((std, index) => {
+            const ratio = (std.targetCps !== '' && std.istdCps !== '' && std.istdCps != 0) 
+                            ? (std.targetCps / std.istdCps).toFixed(4) : '-';
+            
+            const tr = document.createElement('tr');
+            tr.className = 'border-b border-gray-100 hover:bg-gray-50';
+            tr.innerHTML = `
+                <td class="px-2 py-2">
+                    <input type="number" step="any" value="${std.conc}" onchange="updateStd(${std.id}, 'conc', this.value)" class="w-full p-1.5 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all">
+                </td>
+                <td class="px-2 py-2">
+                    <input type="number" step="any" value="${std.targetCps}" onchange="updateStd(${std.id}, 'targetCps', this.value)" class="w-full p-1.5 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all">
+                </td>
+                <td class="px-2 py-2">
+                    <input type="number" step="any" value="${std.istdCps}" onchange="updateStd(${std.id}, 'istdCps', this.value)" class="w-full p-1.5 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all">
+                </td>
+                <td class="px-3 py-2 font-mono font-medium text-blue-800 bg-blue-50/50">${ratio}</td>
+                <td class="px-2 py-2 text-center">
+                    <button onclick="removeStd(${std.id})" class="text-red-500 hover:text-red-700 p-1 rounded hover:bg-red-50" title="刪除">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
+                    </button>
+                </td>
+            `;
+            tbody.appendChild(tr);
+        });
+    }
+
+    // 渲染樣品表格
+    function renderSamples() {
+        const tbody = document.getElementById('samples-body');
+        tbody.innerHTML = '';
+        samples.forEach((smp, index) => {
+            const tr = document.createElement('tr');
+            tr.className = 'border-b border-gray-100 hover:bg-gray-50';
+            tr.innerHTML = `
+                <td class="px-2 py-2">
+                    <input type="text" value="${smp.name}" onchange="updateSmp(${smp.id}, 'name', this.value)" class="w-full p-1.5 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all">
+                </td>
+                <td class="px-2 py-2">
+                    <input type="number" step="any" value="${smp.targetCps}" onchange="updateSmp(${smp.id}, 'targetCps', this.value)" class="w-full p-1.5 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all">
+                </td>
+                <td class="px-2 py-2">
+                    <input type="number" step="any" value="${smp.istdCps}" onchange="updateSmp(${smp.id}, 'istdCps', this.value)" class="w-full p-1.5 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all">
+                </td>
+                <td class="px-2 py-2">
+                    <input type="number" step="any" value="${smp.dilution}" onchange="updateSmp(${smp.id}, 'dilution', this.value)" class="w-full p-1.5 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all">
+                </td>
+                <td class="px-2 py-2 text-center">
+                    <button onclick="removeSmp(${smp.id})" class="text-red-500 hover:text-red-700 p-1 rounded hover:bg-red-50" title="刪除">
+                         <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
+                    </button>
+                </td>
+            `;
+            tbody.appendChild(tr);
+        });
+    }
+
+    // --- 資料操作邏輯 ---
+    function addStandardRow() {
+        standards.push({ id: nextStdId++, conc: '', targetCps: '', istdCps: 1000 });
+        renderAll();
+    }
+
+    function removeStd(id) {
+        standards = standards.filter(s => s.id !== id);
+        renderAll();
+    }
+
+    function updateStd(id, field, value) {
+        const std = standards.find(s => s.id === id);
+        std[field] = value === '' ? '' : Number(value);
+        renderAll();
+    }
+
+    function addSampleRow() {
+        samples.push({ id: nextSmpId++, name: `樣品 ${samples.length + 1}`, targetCps: '', istdCps: 1000, dilution: 1 });
+        renderAll();
+    }
+
+    function removeSmp(id) {
+        samples = samples.filter(s => s.id !== id);
+        renderAll();
+    }
+
+    function updateSmp(id, field, value) {
+        const smp = samples.find(s => s.id === id);
+        smp[field] = (field === 'name') ? value : (value === '' ? '' : Number(value));
+        renderAll();
+    }
+
+    function resetData() {
+        standards = JSON.parse(JSON.stringify(initialStandards));
+        samples = JSON.parse(JSON.stringify(initialSamples));
+        nextStdId = 6;
+        nextSmpId = 2;
+        renderAll();
+    }
+
+    // --- 核心計算：線性回歸 ---
+    function calculateRegression() {
+        let x = []; // 濃度
+        let y = []; // 訊號比值 (Ratio)
+
+        standards.forEach(std => {
+            if (std.conc !== '' && std.targetCps !== '' && std.istdCps !== '' && std.istdCps > 0) {
+                x.push(Number(std.conc));
+                y.push(Number(std.targetCps) / Number(std.istdCps));
+            }
+        });
+
+        const errorDiv = document.getElementById('curve-error');
+        
+        if (x.length < 2) {
+            regressionModel = { slope: 0, intercept: 0, r2: 0, valid: false, maxConc: 0 };
+            document.getElementById('equation-display').innerText = "資料不足";
+            document.getElementById('r2-display').innerText = "-";
+            errorDiv.classList.remove('hidden');
+            return;
+        }
+
+        errorDiv.classList.add('hidden');
+
+        // 最小平方法 (Least Squares Method)
+        let n = x.length;
+        let sumX = 0, sumY = 0, sumXY = 0, sumXX = 0, sumYY = 0;
+        let maxConc = Math.max(...x);
+
+        for (let i = 0; i < n; i++) {
+            sumX += x[i];
+            sumY += y[i];
+            sumXY += x[i] * y[i];
+            sumXX += x[i] * x[i];
+            sumYY += y[i] * y[i];
+        }
+
+        let slope = (n * sumXY - sumX * sumY) / (n * sumXX - sumX * sumX);
+        let intercept = (sumY - slope * sumX) / n;
+        
+        // R平方計算
+        let numerator = (n * sumXY - sumX * sumY);
+        let denominator = Math.sqrt((n * sumXX - sumX * sumX) * (n * sumYY - sumY * sumY));
+        let r = numerator / denominator;
+        let r2 = r * r;
+
+        regressionModel = { slope, intercept, r2, valid: true, maxConc };
+
+        // 數值格式化：最多顯示 6 位小數，並去掉尾數多餘的 0
+        let formatNum = (num) => parseFloat(num.toFixed(6)).toString();
+
+        // 更新介面
+        let sign = intercept >= 0 ? '+' : '-';
+        document.getElementById('equation-display').innerText = `y = ${formatNum(slope)}x ${sign} ${formatNum(Math.abs(intercept))}`;
+        document.getElementById('r2-display').innerText = r2.toFixed(4);
+    }
+
+    // --- 計算並渲染樣品結果報告 ---
+    function renderResults() {
+        const tbody = document.getElementById('results-body');
+        tbody.innerHTML = '';
+
+        if (!regressionModel.valid) {
+            tbody.innerHTML = `<tr><td colspan="4" class="px-3 py-4 text-center text-gray-500">請先建立有效的檢量線</td></tr>`;
+            return;
+        }
+
+        samples.forEach(smp => {
+            let ratioStr = '-';
+            let rawConcStr = '-';
+            let finalConcStr = '-';
+            let warningHtml = '';
+
+            if (smp.targetCps !== '' && smp.istdCps !== '' && smp.istdCps > 0) {
+                let ratio = smp.targetCps / smp.istdCps;
+                ratioStr = ratio.toFixed(4);
+
+                // x = (y - b) / a
+                let rawConc = (ratio - regressionModel.intercept) / regressionModel.slope;
+                rawConcStr = rawConc.toFixed(3);
+
+                let finalConc = rawConc * (smp.dilution || 1);
+                finalConcStr = finalConc.toFixed(3);
+
+                // 防呆：超出檢量線最高濃度
+                if (rawConc > regressionModel.maxConc) {
+                    warningHtml = `<span class="ml-2 inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-red-100 text-red-800" title="樣品原始濃度大於最高標準品，建議增加稀釋倍數重新分析">
+                        <svg class="w-3 h-3 mr-1" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd"></path></svg>
+                        超出範圍
+                    </span>`;
+                } else if (rawConc < 0) {
+                     warningHtml = `<span class="ml-2 inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-yellow-100 text-yellow-800" title="計算濃度為負值，可能訊號低於方法偵測極限(MDL)">
+                        數值偏低
+                    </span>`;
+                }
+            }
+
+            const tr = document.createElement('tr');
+            tr.className = 'border-b border-gray-100 bg-white hover:bg-gray-50';
+            tr.innerHTML = `
+                <td class="px-3 py-3 font-medium text-gray-900">${smp.name || '未命名'}</td>
+                <td class="px-3 py-3 font-mono">${ratioStr}</td>
+                <td class="px-3 py-3 font-mono text-blue-700 bg-blue-50/30">${rawConcStr} ${warningHtml}</td>
+                <td class="px-3 py-3 font-mono font-bold text-green-700 bg-green-50/30 text-base">${finalConcStr}</td>
+            `;
+            tbody.appendChild(tr);
+        });
+    }
+
+    // --- 圖表繪製 ---
+    function updateChart() {
+        const ctx = document.getElementById('calibrationChart').getContext('2d');
+        
+        // 準備標準品資料點 (Scatter)
+        let standardPoints = [];
+        standards.forEach(std => {
+            if (std.conc !== '' && std.targetCps !== '' && std.istdCps !== '' && std.istdCps > 0) {
+                standardPoints.push({
+                    x: Number(std.conc),
+                    y: Number(std.targetCps) / Number(std.istdCps)
+                });
+            }
+        });
+
+        // 準備樣品資料點 (顯示在圖上)
+        let samplePoints = [];
+        if (regressionModel.valid) {
+            samples.forEach(smp => {
+                if (smp.targetCps !== '' && smp.istdCps !== '' && smp.istdCps > 0) {
+                    let ratio = smp.targetCps / smp.istdCps;
+                    let rawConc = (ratio - regressionModel.intercept) / regressionModel.slope;
+                    samplePoints.push({ x: rawConc, y: ratio, name: smp.name });
+                }
+            });
+        }
+
+        // 準備回歸線 (Line)
+        let linePoints = [];
+        if (regressionModel.valid && standardPoints.length > 0) {
+            let xMin = 0;
+            let xMax = regressionModel.maxConc * 1.1; // 畫到稍微超過最高濃度
+            // 如果樣品濃度更高，延伸線條以便顯示
+            if(samplePoints.length > 0) {
+                let maxSmpConc = Math.max(...samplePoints.map(p => p.x));
+                if(maxSmpConc > xMax) xMax = maxSmpConc * 1.05;
+            }
+
+            linePoints.push({ x: xMin, y: regressionModel.slope * xMin + regressionModel.intercept });
+            linePoints.push({ x: xMax, y: regressionModel.slope * xMax + regressionModel.intercept });
+        }
+
+        if (chartInstance) {
+            chartInstance.destroy();
+        }
+
+        chartInstance = new Chart(ctx, {
+            type: 'scatter',
+            data: {
+                datasets: [
+                    {
+                        label: '標準品 (Standards)',
+                        data: standardPoints,
+                        backgroundColor: '#3b82f6', // blue-500
+                        borderColor: '#2563eb', // blue-600
+                        pointRadius: 6,
+                        pointHoverRadius: 8,
+                        order: 2
+                    },
+                    {
+                        label: '未知樣品 (Samples)',
+                        data: samplePoints,
+                        backgroundColor: '#ef4444', // red-500
+                        borderColor: '#dc2626',
+                        pointStyle: 'triangle',
+                        pointRadius: 8,
+                        pointHoverRadius: 10,
+                        order: 1
+                    },
+                    {
+                        label: '檢量線 (Trendline)',
+                        data: linePoints,
+                        type: 'line',
+                        borderColor: 'rgba(156, 163, 175, 0.5)', // gray-400
+                        borderWidth: 2,
+                        borderDash: [5, 5],
+                        fill: false,
+                        pointRadius: 0,
+                        order: 3
+                    }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        position: 'top',
+                        labels: { usePointStyle: true }
+                    },
+                    tooltip: {
+                        callbacks: {
+                            label: function(context) {
+                                let label = context.dataset.label || '';
+                                if (label) {
+                                    label += ': ';
+                                }
+                                if (context.datasetIndex === 1) {
+                                    // 樣品 Dataset
+                                    let pointName = context.raw.name || '未命名';
+                                    label = `${pointName} - `;
+                                }
+                                label += `濃度: ${context.parsed.x.toFixed(3)}, 比值: ${context.parsed.y.toFixed(4)}`;
+                                return label;
+                            }
+                        }
+                    }
+                },
+                scales: {
+                    x: {
+                        title: { display: true, text: '濃度 (Concentration)' },
+                        beginAtZero: true
+                    },
+                    y: {
+                        title: { display: true, text: '訊號比值 (Signal Ratio)' },
+                        beginAtZero: true
+                    }
+                }
+            }
+        });
+    }
+</script>
+</body>
+</html>
